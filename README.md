@@ -1,4 +1,4 @@
-# desk-occupancy-manager
+# Desk Occupancy Manager
 Code for our ESP8266 desk occupancy devices.
 
 Barnsley Council has aspirations to mobilise it's workforce, allowing them the freedom and flexibility to work from anywhere - home, coffee shop, caravan, anywhere that a connection with the corporate VPN can be achieved.
