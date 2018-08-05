@@ -1,0 +1,7 @@
+/*EEPROMData devDetails = {
+    "GetYourAssToMars", 
+    "O2caR&Jb#2013&17", 
+    "GWP-L9-001"
+  };
+  EEPROM.put(0, devDetails);
+  EEPROM.commit();*/
