@@ -15,7 +15,7 @@ EEPROMData creds = { '\0', '\0', '\0' };
 ESP8266WebServer server(80);
 bool activeAP = false;
 HTTPClient http;
-
+char macAddr[16];
 
 // Define our pins
 int redLedPin = D5;
@@ -36,13 +36,14 @@ unsigned long statusCheckDelay = 30000;
 // We might want to specify Wi-Fi settings for examples
 void openAP() {
   if (!activeAP) {
-    Serial.print("Launching AP...");
+    Serial.print("Launching AP ");
+    Serial.print(macAddr);
+    Serial.print("...");
     digitalWrite(redLedPin, HIGH);
     digitalWrite(yellowLedPin, HIGH);
     digitalWrite(greenLedPin, HIGH);
     WiFi.mode(WIFI_AP);
-
-    activeAP = WiFi.softAP("DOMDEVICE"); //TODO: Make this a unique id based on softAP mac address
+    activeAP = WiFi.softAP(macAddr);
     Serial.println("Done!");
   }
 }
@@ -64,9 +65,9 @@ void closeAP() {
 
 // Connect to the Wi-Fi so we can access the DB
 void connectWiFi() {
-  Serial.printf("Connecting %s to %s", creds.devId, creds.ssid);
   WiFi.disconnect(true);
-  if (creds.ssid != '\0') {
+  if (creds.ssid[0] != '\0') {
+    Serial.printf("Connecting %s to %s", creds.devId, creds.ssid);
     WiFi.mode(WIFI_STA);
     WiFi.hostname(creds.devId);
     digitalWrite(yellowLedPin, HIGH); // Indicates connecting
@@ -78,12 +79,12 @@ void connectWiFi() {
     }
     digitalWrite(yellowLedPin, LOW); // Confirms complete
   } else {
-    Serial.println("Note: Cannot connect to Wi-Fi. Device has no stored credentials!");
+    Serial.print("Cannot connect to Wi-Fi. Device has no stored credentials. ");
   }
   
   // Handle based on connection status
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.printf("Failed with status code %d", WiFi.status());
+    Serial.printf("Status code %d!\n", WiFi.status());
     openAP();
   } else {
     Serial.println("Done!");
@@ -99,6 +100,9 @@ void serveReset() {
   String bodyContent = "";
   if (server.hasArg("confirmed")) { // postback
     Serial.print("Handling reset postback...");
+    memset(creds.ssid, 0, sizeof creds.ssid);
+    memset(creds.pass, 0, sizeof creds.pass);
+    memset(creds.devId, 0, sizeof creds.devId);
     creds = { '\0', '\0', '\0' };
     EEPROM.put(0, creds);
     EEPROM.commit();
@@ -138,12 +142,12 @@ void serveConfigure() {
     Serial.print("Serving configuration page...");
     bodyContent += "<form action=\"/configure\" method=\"post\" onSubmit=\"validateForm()\">";
     bodyContent += "<label for=\"ssid\">SSID*</label>";
-    bodyContent += "<input type=\"text\" class=\"textbox\" name=\"ssid\">";
+    bodyContent += "<input type=\"text\" class=\"textbox\" name=\"ssid\" value=\"" + (String)creds.ssid + "\">";
     bodyContent += "<label for=\"pass\">Password</label>";
-    bodyContent += "<input type=\"password\" class=\"textbox\" name=\"pass\">";
+    bodyContent += "<input type=\"password\" class=\"textbox\" name=\"pass\" value=\"" + (String)creds.pass + "\">";
     bodyContent += "<label for=\"devId\">Device name*</label>";
-    bodyContent += "<input type=\"text\" class=\"textbox\" name=\"devId\">";
-    bodyContent += "<input type=\"submit\" href=\"/serve\" class=\"button\" value=\"Connect\">";
+    bodyContent += "<input type=\"text\" class=\"textbox\" name=\"devId\" value=\"" + (String)creds.devId + "\">";
+    bodyContent += "<input type=\"submit\" href=\"/serve\" class=\"button\" value=\"Save\">";
     bodyContent += "</form>";
     bodyContent += "<a href=\"/\" class=\"button\">Back</a>";
   }
@@ -187,6 +191,8 @@ void serveRestart() {
 void serveHome() {
   Serial.print("Serving home page...");
   String bodyContent = "";
+  bodyContent += "<p>SSID: " + (String)creds.ssid + "</p>";
+  bodyContent += "<p>Device ID: " + (String)creds.devId + "</p>";
   bodyContent += "<a href=\"/configure\" class=\"button\">Configure WiFi</a>";
   bodyContent += "<a href=\"/reset\" class=\"button\">Factory Reset</a>";
   bodyContent += "<a href=\"/restart\" class=\"button\">Restart Device</a>";
@@ -202,28 +208,27 @@ void serveHome() {
 
 // Read the desk status back from the DB
 void checkDesk() {
-  if (millis() - lastStatusCheck > statusCheckDelay) {
-    Serial.print("Checking desk status with DB...");
+  if ((lastStatusCheck ==0) || (millis() - lastStatusCheck > statusCheckDelay)) {
+    Serial.print("Checking status of ");
+    Serial.print(creds.devId);
+    Serial.print(" with DB...");
     lastStatusCheck = millis();
     digitalWrite(yellowLedPin, HIGH);
     http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/" + (String)creds.devId);
-    int xyz = http.GET();
-    if (xyz == 200) {
-      String payload = http.getString();
-      if (payload.indexOf("status") > 0) {
-        Serial.print(" recieved ");
-        Serial.print(payload);
-        Serial.print("...");
-        deskOccupied = (payload.indexOf("Occupied") > 0);
-      }
-    } else {
-      Serial.print(" status ");
-      Serial.print(xyz);
-      Serial.print("...");
+    int xyz = 0;
+    while (xyz != 200) {
+      xyz = http.GET();
+    }
+    
+    String payload = http.getString();
+    if (payload.indexOf("status") > 0) {
+      Serial.print(" received ");
+      Serial.print(payload);
+      Serial.println("!");
+      deskOccupied = (payload.indexOf("Occupied") > 0);
     }
     http.end();
     digitalWrite(yellowLedPin, LOW);
-    Serial.println("Done!");
   }
 }
 
@@ -237,6 +242,7 @@ void occupyDesk() {
     http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/" + (String)creds.devId + "/occupied");
     if (http.GET() == 200) { deskOccupied = true; }
     http.end();
+    lastStatusCheck = millis();
     digitalWrite(yellowLedPin, LOW);
     Serial.println("Done!");
   }
@@ -251,6 +257,7 @@ void freeDesk() {
     http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/" + (String)creds.devId + "/available");
     if (http.GET() == 200) { deskOccupied = false; }
     http.end();
+    lastStatusCheck = millis();
     digitalWrite(yellowLedPin, LOW);
     Serial.println("Done!");
   }
@@ -271,7 +278,16 @@ void setup() {
   while(!Serial);
   Serial.println(""); Serial.println("");
   delay(5000); // TODO: remove after dev - keep missing first bytes of serial
-  Serial.print("Starting setup...");
+  Serial.print("Starting setup of device ");
+
+  // Get our macAddress in case we have to launch an AP
+  String macAddress = "DOM-" + WiFi.softAPmacAddress();
+  macAddress.replace(":", "");
+  Serial.print(macAddress);
+  Serial.print("...");
+  for(int x = 0; x<=macAddress.length(); x++) {
+    macAddr[x] = macAddress.charAt(x);
+  }
 
   // Configure our pins
   pinMode(redLedPin, OUTPUT);
@@ -301,8 +317,6 @@ void setup() {
   } else {
     connectWiFi();
   }
-
-
 }
 
 
