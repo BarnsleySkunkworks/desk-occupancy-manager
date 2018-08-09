@@ -1,5 +1,6 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266HTTPClient.h>
 #include <EEPROM.h>
 #include "../lib/DOMPages/HTMLPage.h"
 
@@ -13,6 +14,7 @@ struct EEPROMData { // to hold device settings
 EEPROMData creds = { '\0', '\0', '\0' };
 ESP8266WebServer server(80);
 bool activeAP = false;
+HTTPClient http;
 
 
 // Define our pins
@@ -24,9 +26,10 @@ int greenBtnPin = D2;
 
 
 // Handle our desk occupancy readings
-int deskOccupied = LOW;
+bool deskOccupied = false;
 unsigned long lastStatusCheck = 0;
-unsigned long statusCheckDelay = 10000;
+unsigned long statusCheckDelay = 30000;
+
 
 
 // Launch an access point so we can configure the device from the browser
@@ -38,6 +41,7 @@ void openAP() {
     digitalWrite(yellowLedPin, HIGH);
     digitalWrite(greenLedPin, HIGH);
     WiFi.mode(WIFI_AP);
+
     activeAP = WiFi.softAP("DOMDEVICE"); //TODO: Make this a unique id based on softAP mac address
     Serial.println("Done!");
   }
@@ -83,6 +87,9 @@ void connectWiFi() {
     openAP();
   } else {
     Serial.println("Done!");
+    http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/register/" + (String)creds.devId);
+    http.GET();
+    http.end();
     closeAP();
   }
 }
@@ -197,13 +204,29 @@ void serveHome() {
 void checkDesk() {
   if (millis() - lastStatusCheck > statusCheckDelay) {
     Serial.print("Checking desk status with DB...");
-    digitalWrite(yellowLedPin, HIGH);
     lastStatusCheck = millis();
-    // TODO: Go and check desk status
+    digitalWrite(yellowLedPin, HIGH);
+    http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/" + (String)creds.devId);
+    int xyz = http.GET();
+    if (xyz == 200) {
+      String payload = http.getString();
+      if (payload.indexOf("status") > 0) {
+        Serial.print(" recieved ");
+        Serial.print(payload);
+        Serial.print("...");
+        deskOccupied = (payload.indexOf("Occupied") > 0);
+      }
+    } else {
+      Serial.print(" status ");
+      Serial.print(xyz);
+      Serial.print("...");
+    }
+    http.end();
     digitalWrite(yellowLedPin, LOW);
     Serial.println("Done!");
   }
 }
+
 
 
 // Write to the DB that this desk is occupied
@@ -211,8 +234,9 @@ void occupyDesk() {
   if (!deskOccupied) {  // Only do this if the desk isn't already set as occupied
     Serial.print("Setting desk as occupied in DB...");
     digitalWrite(yellowLedPin, HIGH);
-    // TODO: Go and update database
-    deskOccupied = true;
+    http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/" + (String)creds.devId + "/occupied");
+    if (http.GET() == 200) { deskOccupied = true; }
+    http.end();
     digitalWrite(yellowLedPin, LOW);
     Serial.println("Done!");
   }
@@ -224,8 +248,9 @@ void freeDesk() {
   if (deskOccupied) {  // Only do this if the desk isn't already set as free
     Serial.print("Setting desk as free in DB...");
     digitalWrite(yellowLedPin, HIGH);
-    // TODO: Go and update database
-    deskOccupied = false;
+    http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/" + (String)creds.devId + "/available");
+    if (http.GET() == 200) { deskOccupied = false; }
+    http.end();
     digitalWrite(yellowLedPin, LOW);
     Serial.println("Done!");
   }
@@ -276,15 +301,17 @@ void setup() {
   } else {
     connectWiFi();
   }
+
+
 }
 
 
 void loop() {
   if (WiFi.status() == WL_CONNECTED) {
-    checkDesk();
-    setLights();
     if (digitalRead(redBtnPin) == HIGH) { occupyDesk(); }
     if (digitalRead(greenBtnPin) == HIGH) { freeDesk(); }
+    checkDesk();
+    setLights();
     closeAP();
   } else {
     openAP();
