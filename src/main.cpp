@@ -1,3 +1,4 @@
+#include <Adafruit_NeoPixel.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266HTTPClient.h>
@@ -18,19 +19,20 @@ HTTPClient http;
 char macAddr[16];
 
 // Define our pins
-int redLedPin = D5;
-int yellowLedPin = D7;
-int greenLedPin = D8;
-int redBtnPin = D1;
-int greenBtnPin = D2;
-
+int ledPin = D2;
+int btnPin = D3;
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(1, ledPin, NEO_GRB + NEO_KHZ800);
 
 // Handle our desk occupancy readings
 bool deskOccupied = false;
 unsigned long lastStatusCheck = 0;
 unsigned long statusCheckDelay = 30000;
 
-
+// Light the NeoPixel as we need
+void setLed(int r, int g, int b) {
+  pixels.setPixelColor(0, r, g, b);
+  pixels.show();
+}
 
 // Launch an access point so we can configure the device from the browser
 // We might want to specify Wi-Fi settings for examples
@@ -39,9 +41,7 @@ void openAP() {
     Serial.print("Launching AP ");
     Serial.print(macAddr);
     Serial.print("...");
-    digitalWrite(redLedPin, HIGH);
-    digitalWrite(yellowLedPin, HIGH);
-    digitalWrite(greenLedPin, HIGH);
+    setLed(200,162,200); // White
     WiFi.mode(WIFI_AP);
     activeAP = WiFi.softAP(macAddr);
     Serial.println("Done!");
@@ -55,9 +55,7 @@ void closeAP() {
   if (activeAP) {
     Serial.print("Closing AP...");
     activeAP = !WiFi.softAPdisconnect(true);
-    digitalWrite(redLedPin, LOW);
-    digitalWrite(yellowLedPin, LOW);
-    digitalWrite(greenLedPin, LOW);
+    setLed(0, 0, 0); // Off
     Serial.println("Done!");
   }
 }
@@ -70,14 +68,14 @@ void connectWiFi() {
     Serial.printf("Connecting %s to %s", creds.devId, creds.ssid);
     WiFi.mode(WIFI_STA);
     WiFi.hostname(creds.devId);
-    digitalWrite(yellowLedPin, HIGH); // Indicates connecting
+    setLed(0, 0, 255); // Blue
     WiFi.begin(creds.ssid, creds.pass);
     for (int x=0; x<=60; x++) { // Try to connect for up to a minute
       Serial.print(".");
       delay(500);
       if (WiFi.status() == WL_CONNECTED) { break; }
     }
-    digitalWrite(yellowLedPin, LOW); // Confirms complete
+    setLed(0, 0, 0); // Off.
   } else {
     Serial.print("Cannot connect to Wi-Fi. Device has no stored credentials. ");
   }
@@ -213,7 +211,6 @@ void checkDesk() {
     Serial.print(creds.devId);
     Serial.print(" with DB...");
     lastStatusCheck = millis();
-    digitalWrite(yellowLedPin, HIGH);
     http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/" + (String)creds.devId);
     int xyz = 0;
     while (xyz != 200) {
@@ -228,7 +225,6 @@ void checkDesk() {
       deskOccupied = (payload.indexOf("Occupied") > 0);
     }
     http.end();
-    digitalWrite(yellowLedPin, LOW);
   }
 }
 
@@ -238,12 +234,11 @@ void checkDesk() {
 void occupyDesk() {
   if (!deskOccupied) {  // Only do this if the desk isn't already set as occupied
     Serial.print("Setting desk as occupied in DB...");
-    digitalWrite(yellowLedPin, HIGH);
+    setLed(255, 0, 0); // Red
     http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/" + (String)creds.devId + "/occupied");
     if (http.GET() == 200) { deskOccupied = true; }
     http.end();
     lastStatusCheck = millis();
-    digitalWrite(yellowLedPin, LOW);
     Serial.println("Done!");
   }
 }
@@ -253,23 +248,14 @@ void occupyDesk() {
 void freeDesk() {
   if (deskOccupied) {  // Only do this if the desk isn't already set as free
     Serial.print("Setting desk as free in DB...");
-    digitalWrite(yellowLedPin, HIGH);
+    setLed(0, 255, 0); // Green
     http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/" + (String)creds.devId + "/available");
     if (http.GET() == 200) { deskOccupied = false; }
     http.end();
     lastStatusCheck = millis();
-    digitalWrite(yellowLedPin, LOW);
     Serial.println("Done!");
   }
 }
-
-
-// Switch the LEDs appropriate to the desks availability
-void setLights() {
-  digitalWrite(redLedPin, deskOccupied);
-  digitalWrite(greenLedPin, !deskOccupied);
-}
-
 
 // Setup the device on power up
 void setup() {
@@ -290,14 +276,9 @@ void setup() {
   }
 
   // Configure our pins
-  pinMode(redLedPin, OUTPUT);
-  pinMode(yellowLedPin, OUTPUT);
-  pinMode(greenLedPin, OUTPUT);
-  pinMode(redBtnPin, INPUT);
-  pinMode(greenBtnPin, INPUT);
-  digitalWrite(redLedPin, LOW);
-  digitalWrite(yellowLedPin, LOW);
-  digitalWrite(greenLedPin, LOW);
+  pinMode(ledPin, OUTPUT);
+  pinMode(btnPin, INPUT);
+  pixels.begin();
 
   // Setup our AP in case remote config is required
   server.on("/", serveHome);
@@ -312,7 +293,7 @@ void setup() {
   Serial.println("Done!");
 
   // Connect to Wi-Fi now everythig is prepared
-  if (digitalRead(redBtnPin) == HIGH && digitalRead(greenBtnPin) == HIGH) {
+  if (digitalRead(btnPin) == LOW) {
     openAP();
   } else {
     connectWiFi();
@@ -322,10 +303,15 @@ void setup() {
 
 void loop() {
   if (WiFi.status() == WL_CONNECTED) {
-    if (digitalRead(redBtnPin) == HIGH) { occupyDesk(); }
-    if (digitalRead(greenBtnPin) == HIGH) { freeDesk(); }
+    if (digitalRead(btnPin) == LOW) {
+      if (!deskOccupied) {
+        occupyDesk();
+      } else {
+        freeDesk();
+      }
+    }
     checkDesk();
-    setLights();
+    setLed((deskOccupied) ? 255 : 0, (deskOccupied) ? 0 : 255, 0);
     closeAP();
   } else {
     openAP();
