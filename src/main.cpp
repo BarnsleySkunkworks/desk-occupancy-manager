@@ -28,10 +28,34 @@ bool deskOccupied = false;
 unsigned long lastStatusCheck = 0;
 unsigned long statusCheckDelay = 30000;
 
+// Handle our light pulse
+int pulseVal = 0;
+unsigned long pulseDelay = 25;
+unsigned long pulseLastMillis = 0;
+int pulseStep = 5;
+
 // Light the NeoPixel as we need
-void setLed(int r, int g, int b) {
+void setLed(int r, int g, int b, bool resetBrightness = false) {
   pixels.setPixelColor(0, r, g, b);
+  if (resetBrightness) { 
+    pulseVal = 255;
+    pixels.setBrightness(pulseVal);
+  }
   pixels.show();
+}
+
+void pulseLed() {
+  if (!deskOccupied) { // Only pulse the green light
+    if (pulseLastMillis == 0 || millis() - pulseLastMillis > pulseDelay) { // Don't pulse too quickly
+      pulseLastMillis = millis();
+      pulseVal = pulseVal + pulseStep;
+      if (pulseVal >= 255) { pulseStep = pulseStep - 10; pulseVal = 255; }
+      if (pulseVal <= 0) { pulseStep = pulseStep + 10; pulseVal = 0; }
+      pixels.setBrightness(pulseVal);
+      Serial.println(pulseVal);
+      pixels.show();
+    }
+  }
 }
 
 // Launch an access point so we can configure the device from the browser
@@ -206,7 +230,7 @@ void serveHome() {
 
 // Read the desk status back from the DB
 void checkDesk() {
-  if ((lastStatusCheck ==0) || (millis() - lastStatusCheck > statusCheckDelay)) {
+  if ((lastStatusCheck == 0) || (millis() - lastStatusCheck > statusCheckDelay)) {
     Serial.print("Checking status of ");
     Serial.print(creds.devId);
     Serial.print(" with DB...");
@@ -228,13 +252,11 @@ void checkDesk() {
   }
 }
 
-
-
 // Write to the DB that this desk is occupied
 void occupyDesk() {
   if (!deskOccupied) {  // Only do this if the desk isn't already set as occupied
     Serial.print("Setting desk as occupied in DB...");
-    setLed(255, 0, 0); // Red
+    setLed(255, 0, 0, true); // Red
     http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/" + (String)creds.devId + "/occupied");
     if (http.GET() == 200) { deskOccupied = true; }
     http.end();
@@ -248,13 +270,21 @@ void occupyDesk() {
 void freeDesk() {
   if (deskOccupied) {  // Only do this if the desk isn't already set as free
     Serial.print("Setting desk as free in DB...");
-    setLed(0, 255, 0); // Green
+    setLed(0, 255, 0, true); // Green
     http.begin("http://desk-occcpancy-manager.azurewebsites.net/api/desk/" + (String)creds.devId + "/available");
     if (http.GET() == 200) { deskOccupied = false; }
     http.end();
     lastStatusCheck = millis();
     Serial.println("Done!");
   }
+}
+
+void setDesk() {
+  if (!deskOccupied) {
+        occupyDesk();
+      } else {
+        freeDesk();
+      }
 }
 
 // Setup the device on power up
@@ -304,14 +334,11 @@ void setup() {
 void loop() {
   if (WiFi.status() == WL_CONNECTED) {
     if (digitalRead(btnPin) == LOW) {
-      if (!deskOccupied) {
-        occupyDesk();
-      } else {
-        freeDesk();
-      }
+      setDesk();
     }
     checkDesk();
     setLed((deskOccupied) ? 255 : 0, (deskOccupied) ? 0 : 255, 0);
+    pulseLed();
     closeAP();
   } else {
     openAP();
