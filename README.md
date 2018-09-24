@@ -10,3 +10,5 @@ In mobilising it's workforce the council gains the opportunity to draw savings f
 This code is for a device that we intend to sit on every desk such that staff can indicate by pressing a button when they've occupied a desk. They can also indicate when they've finished with it by pressing another button. The status of all desks is held centrally and staff can use their mobiles to find available desks before they arrive, or using screens as they arrive in the building lobby.
 
 IoT desk occupancy devices.
+
+More information at https://kingstonrichard.uk/r/dom-proto.
