@@ -1,0 +1,3 @@
+[submodule "lib/WiFiConnector"]
+	path = lib/WiFiConnector
+	url = https://github.com/barnsleyskunkworks/wifi-connector
