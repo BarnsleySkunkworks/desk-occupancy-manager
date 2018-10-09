@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-const char HTMLPage[] PROGMEM = R"=====(
+const char _HTMLPage[] PROGMEM = R"=====(
 <!DOCTYPE html>
 <html lang=\"en\">
     <head>
