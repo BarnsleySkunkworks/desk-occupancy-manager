@@ -24,6 +24,7 @@ unsigned long pulseLastMillis = 0;
 int pulseVal = 0;
 int pulseStep = 5;
 String webServiceUri = "http://desk-occcpancy-manager.azurewebsites.net/api/desk/";
+String RFID = "/000";
 
 // We use this in various places to assign colour and brightness values to the led
 void setLed(int r, int g, int b, bool resetBrightness = false) {
@@ -49,8 +50,9 @@ void pulseLed() {
 
 // Make http requests and wait for response
 String callUri(String uri) {
-  httpClient.begin(webServiceUri + (String)wifiConnector.credentials.name);
-  while (httpClient.GET() != 200);
+  Serial.println(uri);
+  httpClient.begin(uri);
+  httpClient.GET();
   String returnVal = "200;" + httpClient.getString();
   httpClient.end();
   return returnVal;
@@ -70,7 +72,7 @@ void occupyDesk() {
   if (!deskOccupied) {  // Only do this if the desk isn't already set as occupied
     Serial.printf("Setting status of %s as occupied in DB...\n", wifiConnector.credentials.name);
     setLed(255, 0, 0, true); // Red
-    deskOccupied = (callUri(webServiceUri + (String)wifiConnector.credentials.name + '/000').indexOf("200;") == 0);
+    deskOccupied = (callUri(webServiceUri + (String)wifiConnector.credentials.name + (String)RFID).indexOf("200;") == 0);
     lastStatusCheck = millis();
   }
 }
@@ -80,7 +82,7 @@ void freeDesk() {
   if (deskOccupied) {  // Only do this if the desk isn't already set as free
     Serial.print("Setting status of %s as free in DB...\n");
     setLed(0, 255, 0, true); // Green
-    deskOccupied = !(callUri(webServiceUri + (String)wifiConnector.credentials.name + '/000').indexOf("200;") == 0);
+    deskOccupied = !(callUri(webServiceUri + (String)wifiConnector.credentials.name + (String)RFID).indexOf("200;") == 0);
     lastStatusCheck = millis();
   }
 }
@@ -96,7 +98,7 @@ void setDesk() {
 // Connect to the Wi-Fi so we can access the DB
 void connectWiFi() {
   setLed(0, 0, 255); // Blue
-  connectWiFi();
+  wifiConnector.connectWiFi();
   if (!wifiConnector.isConnected()) {
     setLed(255, 255, 255); // White.
   } else {
