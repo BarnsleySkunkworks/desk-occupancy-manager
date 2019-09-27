@@ -1,10 +1,12 @@
 # Created by https://www.gitignore.io/api/platformio,visualstudiocode
+# Edit at https://www.gitignore.io/?templates=platformio,visualstudiocode
 
 ### PlatformIO ###
 .pioenvs
 .piolibdeps
 .clang_complete
 .gcc-flags.json
+.pio
 
 ### VisualStudioCode ###
 .vscode/*
@@ -13,8 +15,8 @@
 !.vscode/launch.json
 !.vscode/extensions.json
 
+### VisualStudioCode Patch ###
+# Ignore all local history of files
+.history
 
 # End of https://www.gitignore.io/api/platformio,visualstudiocode
-.vscode/.browse.c_cpp.db*
-.vscode/c_cpp_properties.json
-.vscode/launch.json

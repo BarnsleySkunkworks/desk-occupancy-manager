@@ -70,7 +70,7 @@ void occupyDesk() {
   if (!deskOccupied) {  // Only do this if the desk isn't already set as occupied
     Serial.printf("Setting status of %s as occupied in DB...\n", wifiConnector.credentials.name);
     setLed(255, 0, 0, true); // Red
-    deskOccupied = (callUri(webServiceUri + (String)wifiConnector.credentials.name).indexOf("200;") == 0);
+    deskOccupied = (callUri(webServiceUri + (String)wifiConnector.credentials.name + '/000').indexOf("200;") == 0);
     lastStatusCheck = millis();
   }
 }
@@ -80,7 +80,7 @@ void freeDesk() {
   if (deskOccupied) {  // Only do this if the desk isn't already set as free
     Serial.print("Setting status of %s as free in DB...\n");
     setLed(0, 255, 0, true); // Green
-    deskOccupied = !(callUri(webServiceUri + (String)wifiConnector.credentials.name).indexOf("200;") == 0);
+    deskOccupied = !(callUri(webServiceUri + (String)wifiConnector.credentials.name + '/000').indexOf("200;") == 0);
     lastStatusCheck = millis();
   }
 }
