@@ -27,6 +27,7 @@ unsigned long pulseDelay = 25;
 unsigned long pulseLastMillis = 0;
 int pulseVal = 255;
 int pulseStep = 5;
+String fingerPrint = "398e01a50c668a74f0104a836015a26e21554cce";
 
 bool isSuccess(int responseCode) {
   return ((responseCode > 199) && (responseCode < 400));
@@ -94,7 +95,7 @@ void getStatus()
     Serial.printf("Requesting %s\n", apiGetUri);
     
     // Make the request and deserialise the JSON response
-    httpClient.begin(apiGetUri, "1ba408a04fe8f7b41c1b5f570900e034caec2a13");
+    httpClient.begin(apiGetUri, fingerPrint);
     int responseCode = makeGetRequest(3);
 
     if (isSuccess(responseCode)) 
@@ -121,12 +122,12 @@ void setStatus()
   char apiSetUri[256];
   Serial.printf("Status is currently %s\n", statusIs());
   Serial.printf("Toggled status is therefore %s\n", statusIs(true));
-  sprintf(apiSetUri, "%s/%s/%s/%ld", apiBaseUri, wifiConnector.credentials.name, statusIs(true), rfidCode);
-  Serial.printf("Setting status of %s to %s for card %ld\n", wifiConnector.credentials.name, statusIs(true), rfidCode);
+  sprintf(apiSetUri, "%s/%s/%s/%d", apiBaseUri, wifiConnector.credentials.name, statusIs(true), rfidCode);
+  Serial.printf("Setting status of %s to %s for card %d\n", wifiConnector.credentials.name, statusIs(true), rfidCode);
   Serial.printf("Requesting %s\n", apiSetUri);
   
   // Make the request to set the status in the DB
-  httpClient.begin(apiSetUri, "1ba408a04fe8f7b41c1b5f570900e034caec2a13");
+  httpClient.begin(apiSetUri, fingerPrint);
   int responseCode = makeGetRequest(3);
   httpClient.end();
   lastStatusCheck = millis();
@@ -136,23 +137,15 @@ void setStatus()
 
 // Connect to the Wi-Fi so we can access the DB
 void connect() {
-  Serial.printf("Setting LED to blue...");
   setLed(0, 0, 255); // Blue
-  Serial.printf("Done!\n");
   wifiConnector.connectWiFi();
-  if (!wifiConnector.isConnected()) {
-    Serial.printf("Setting LED to white...");
-    setLed(255, 255, 255); // White.
-    Serial.printf("Done!\n");
-  } else {
-    Serial.printf("Setting LED to off...");
-    setLed(0, 0, 0); // Off.
-    Serial.printf("Done!\n");
-  }
+  setLed(0, 0, 0); // Off
 }
 
 // Setup the device on power up
 void setup() {
+  delay(5000); // TODO: remove after dev - keep missing first bytes of serial
+  
   Serial.begin(115200);
   while(!Serial);
   Serial.printf("\n\nStarting up device... ");
@@ -162,30 +155,36 @@ void setup() {
   pinMode(btnPin, INPUT);
   pixels.begin();
 
-  // Built in to allow us to hold button for access point
-  delay(5000); // TODO: remove after dev - keep missing first bytes of serial
-
   // Connect to WiFi
   Serial.println("Done!");
 
   // If button is being held down, fire up access point instead of trying to connect
   if (digitalRead(btnPin) == LOW) 
   { 
+    Serial.println("Button depressed so opening access point");
     setLed(255, 255, 255, true);
     wifiConnector.openAccessPoint();
-  } else {
-    connect();
   }
 }
 
 void loop() {
-  if (wifiConnector.isConnected()) {
+  if (wifiConnector.isConnected()) 
+  {
     if (digitalRead(btnPin) == LOW) { setStatus(); }
     getStatus();
     setLed((deskOccupied) ? 255 : 0, (deskOccupied) ? 0 : 255, 0);
     pulseLed();
     wifiConnector.closeAccessPoint();
-  } else {
+  } 
+  else if (wifiConnector.isDisconnected()) 
+  {
+    if (!wifiConnector.hasOpenAccessPoint())
+    {
+      connect();
+    }
+  } 
+  else 
+  {
     setLed(255, 255, 0, true);
     wifiConnector.openAccessPoint();
   }
